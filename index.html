@@ -1,12 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Webcam Auto Capture</title>
+  <title>Tự động chụp ảnh từ webcam</title>
 </head>
 <body>
   <video id="webcam" autoplay></video>
   <canvas id="canvas" style="display:none;"></canvas>
+
+  <!-- Thêm thư viện socket.io-client -->
+  <script src="https://cdn.socket.io/4.2.0/socket.io.min.js"></script>
+
   <script>
+    // Khởi tạo kết nối Socket.IO
+    const socket = io('http://10.86.144.136:3500');
+
+    // Sự kiện kết nối thành công
+    socket.on('connect', function() {
+      console.log("Kết nối Socket.IO thành công.");
+    });
+
+    // Sự kiện mất kết nối
+    socket.on('disconnect', function() {
+      console.log("Mất kết nối Socket.IO.");
+    });
+
+    // Sự kiện lỗi
+    socket.on('error', function(error) {
+      console.error("Lỗi Socket.IO: ", error);
+    });
+
     class Webcam {
       constructor(webcamElement, canvasElement = null) {
         this._webcamElement = webcamElement;
@@ -28,13 +50,9 @@
       }
 
       async start() {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          this._stream = await navigator.mediaDevices.getUserMedia(this.getMediaConstraints());
-          this._webcamElement.srcObject = this._stream;
-          this._webcamElement.play();
-        } else {
-          throw new Error("getUserMedia is not supported in this browser");
-        }
+        this._stream = await navigator.mediaDevices.getUserMedia(this.getMediaConstraints());
+        this._webcamElement.srcObject = this._stream;
+        this._webcamElement.play();
       }
 
       stop() {
@@ -44,27 +62,38 @@
         }
       }
 
-      snap() {
+      snapAndConvertToJpg(callback) {
         if (this._canvasElement) {
           this._canvasElement.width = this._webcamElement.videoWidth;
           this._canvasElement.height = this._webcamElement.videoHeight;
           const context = this._canvasElement.getContext('2d');
           context.drawImage(this._webcamElement, 0, 0, this._canvasElement.width, this._canvasElement.height);
-          const dataUrl = this._canvasElement.toDataURL('image/png');
-          console.log("Captured Image: ", dataUrl);  // You can handle the captured image data here
-          return dataUrl;
+
+          // Chuyển đổi thành dạng JPG
+          this._canvasElement.toBlob((blob) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+              // Encode dữ liệu ảnh dưới dạng base64 và loại bỏ phần tiền tố
+              const jpgData = reader.result.split(',')[1];
+              // Gọi callback với dữ liệu ảnh JPG
+              callback(jpgData);
+            };
+          }, 'image/jpeg');
         } else {
           throw "Canvas element is missing";
         }
       }
 
-      startAutoCapture(interval = 1000) {
+      startAutoCapture(callback, interval = 1000) {
         this.stopAutoCapture();
         this._captureInterval = setInterval(() => {
           try {
-            this.snap();
+            this.snapAndConvertToJpg((jpgData) => {
+              callback(jpgData);
+            });
           } catch (error) {
-            console.error("Error capturing image: ", error);
+            console.error("Lỗi khi chụp ảnh: ", error);
           }
         }, interval);
       }
@@ -77,17 +106,24 @@
       }
     }
 
+    // Khởi tạo webcam và kết nối Socket.IO
     const webcamElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('canvas');
     const webcam = new Webcam(webcamElement, canvasElement);
 
+    // Bắt đầu chụp và gửi ảnh tự động
     webcam.start()
       .then(() => {
-        webcam.startAutoCapture(1000);  // Start auto-capturing every 1 second
-        console.log("Webcam started");
+        webcam.startAutoCapture((jpgData) => {
+          
+          // Gửi dữ liệu ảnh JPG qua kết nối Socket.IO
+          socket.emit('detect_user', jpgData); // Phát ra sự kiện detect_user
+          console.log("Đã phát sự kiện detect_user với ảnh", jpgData);
+        }, 1000);  // Bắt đầu chụp tự động mỗi 1 giây
+        console.log("Webcam đã khởi động");
       })
       .catch(err => {
-        console.error("Error starting webcam: ", err);
+        console.error("Lỗi khi khởi động webcam: ", err);
       });
   </script>
 </body>

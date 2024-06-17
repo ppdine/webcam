@@ -31,6 +31,7 @@
     "webpack-dev-server": "^3.1.10"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "webcam-easy": "^1.1.1"
   }
 }
