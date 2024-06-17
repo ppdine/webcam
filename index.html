@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Webcam Auto Capture</title>
+</head>
+<body>
+  <video id="webcam" autoplay></video>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <script>
+    class Webcam {
+      constructor(webcamElement, canvasElement = null) {
+        this._webcamElement = webcamElement;
+        this._canvasElement = canvasElement;
+        this._facingMode = 'user';
+        this._stream = null;
+        this._captureInterval = null;
+      }
+
+      getMediaConstraints() {
+        return {
+          video: {
+            facingMode: this._facingMode,
+            width: { ideal: 640 },
+            height: { ideal: 360 }
+          },
+          audio: false
+        };
+      }
+
+      async start() {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          this._stream = await navigator.mediaDevices.getUserMedia(this.getMediaConstraints());
+          this._webcamElement.srcObject = this._stream;
+          this._webcamElement.play();
+        } else {
+          throw new Error("getUserMedia is not supported in this browser");
+        }
+      }
+
+      stop() {
+        if (this._stream) {
+          this._stream.getTracks().forEach(track => track.stop());
+          this._stream = null;
+        }
+      }
+
+      snap() {
+        if (this._canvasElement) {
+          this._canvasElement.width = this._webcamElement.videoWidth;
+          this._canvasElement.height = this._webcamElement.videoHeight;
+          const context = this._canvasElement.getContext('2d');
+          context.drawImage(this._webcamElement, 0, 0, this._canvasElement.width, this._canvasElement.height);
+          const dataUrl = this._canvasElement.toDataURL('image/png');
+          console.log("Captured Image: ", dataUrl);  // You can handle the captured image data here
+          return dataUrl;
+        } else {
+          throw "Canvas element is missing";
+        }
+      }
+
+      startAutoCapture(interval = 1000) {
+        this.stopAutoCapture();
+        this._captureInterval = setInterval(() => {
+          try {
+            this.snap();
+          } catch (error) {
+            console.error("Error capturing image: ", error);
+          }
+        }, interval);
+      }
+
+      stopAutoCapture() {
+        if (this._captureInterval) {
+          clearInterval(this._captureInterval);
+          this._captureInterval = null;
+        }
+      }
+    }
+
+    const webcamElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('canvas');
+    const webcam = new Webcam(webcamElement, canvasElement);
+
+    webcam.start()
+      .then(() => {
+        webcam.startAutoCapture(1000);  // Start auto-capturing every 1 second
+        console.log("Webcam started");
+      })
+      .catch(err => {
+        console.error("Error starting webcam: ", err);
+      });
+  </script>
+</body>
+</html>
